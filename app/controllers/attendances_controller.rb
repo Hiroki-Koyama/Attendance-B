@@ -31,14 +31,19 @@ class AttendancesController < ApplicationController
   
   def update_one_month
     ActiveRecord::Base.transaction do # トランザクションを開始します。
-    # データベースの操作を保障したい処理をここに記述します。
-      attendances_params.each do |id, item|
-        attendance = Attendance.find(id)
-        attendance.update_attributes!(item)
+      if attendances_invalid?
+      # データベースの操作を保障したい処理をここに記述します。
+        attendances_params.each do |id, item|
+          attendance = Attendance.find(id)
+          attendance.update_attributes!(item)
+        end
+        flash[:success] = "1ヶ月分の勤怠情報を更新しました。"
+        redirect_to user_url(date: params[:date])
+      else
+        flash[:danger] = "出勤時間と退勤時間が正しくありません。"
+        redirect_to attendances_edit_one_month_user_url(date: params[:date])
       end
     end
-    flash[:success] = "1ヶ月分の勤怠情報を更新しました。"
-    redirect_to user_url(date: params[:date])
   rescue ActiveRecord::RecordInvalid # トランザクションによるエラーの分岐です。
   # ここに例外が発生した時の処理を記述します。
     flash[:danger] = "無効な入力データがあった為、更新をキャンセルしました。"
@@ -53,13 +58,19 @@ class AttendancesController < ApplicationController
     end
     
     # beforeフィルター
-
-    # 管理権限者、または現在ログインしているユーザーを許可します。
-    def admin_or_correct_user
-      @user = User.find(params[:user_id]) if @user.blank?
-      unless current_user?(@user) || current_user.admin?
-        flash[:danger] = "編集権限がありません。"
-        redirect_to(root_url)
-      end  
+    
+       # 不正な値があるか確認する
+    def attendances_invalid?
+      attendances = true
+      attendances_params.each do |id, item|
+        if item[:started_at].blank? && item[:finished_at].blank?
+          next
+        elsif item[:started_at].blank? || item[:finished_at].blank?
+          attendances = false
+        elsif item[:started_at] > item[:finished_at]
+          attendances = false
+        end
+      end
+      return attendances
     end
 end
